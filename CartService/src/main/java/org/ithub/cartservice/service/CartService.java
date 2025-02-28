@@ -1,19 +1,14 @@
 package org.ithub.cartservice.service;
 
-import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ithub.cartservice.client.UserClient;
 import org.ithub.cartservice.dto.CartDto;
 import org.ithub.cartservice.dto.CartItemDto;
 import org.ithub.cartservice.dto.ProductDto;
 import org.ithub.cartservice.dto.UserDto;
 import org.ithub.cartservice.exception.CartNotFoundException;
-import org.ithub.cartservice.exception.ProductNotFoundException;
-import org.ithub.cartservice.exception.UserNotFoundException;
 import org.ithub.cartservice.model.Cart;
 import org.ithub.cartservice.model.CartItem;
-import org.ithub.cartservice.client.CatalogClient;
 import org.ithub.cartservice.repository.CartRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,8 +20,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class CartService {
     private final CartRepository cartRepository;
-    private final CatalogClient catalogClient;
-    private final UserClient userClient;
+    private final CartCircuitBreakerService circuitBreakerService;
 
     @Transactional(readOnly = true)
     public CartDto getCartByUserId(Long userId) {
@@ -39,20 +33,14 @@ public class CartService {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero");
         }
-        ProductDto productDto;
 
-        try {
-            productDto = catalogClient.getProductById(productId);
-        } catch (FeignException.NotFound e) {
-            throw new ProductNotFoundException("Product not found with id: " + productId);
-        } catch (Exception e) {
-            log.error("Error fetching product with id {}: {}", productId, e.getMessage());
-            throw new RuntimeException("Error fetching product data: " + e.getMessage());
-        }
+        // Получаем информацию о продукте через Circuit Breaker
+        ProductDto productDto = circuitBreakerService.getProductById(productId);
 
         if (!productDto.isAvailable()) {
             throw new IllegalStateException("Product is not available: " + productId);
         }
+
         Cart cart = getOrCreateCart(userId);
         CartItem cartItem = new CartItem();
         cartItem.setProductId(productDto.getId());
@@ -98,6 +86,7 @@ public class CartService {
         log.info("Cleared cart for user {}", userId);
         return convertToDto(savedCart);
     }
+
     @Transactional(readOnly = true)
     public CartDto getCartById(Long cartId) {
         Cart cart = cartRepository.findById(cartId)
@@ -105,17 +94,12 @@ public class CartService {
         return convertToDto(cart);
     }
 
+    // Получает существующую корзину пользователя или создает новую
     private Cart getOrCreateCart(Long userId) {
         return cartRepository.findByUserId(userId).orElseGet(() -> {
-            UserDto userDto;
-            try {
-                userDto = userClient.getUserById(userId);
-            } catch (FeignException.NotFound e) {
-                throw new UserNotFoundException("User not found with id: " + userId);
-            } catch (Exception e) {
-                log.error("Error fetching user with id {}: {}", userId, e.getMessage());
-                throw new RuntimeException("Error fetching user data: " + e.getMessage());
-            }
+            // Получаем информацию о пользователе через Circuit Breaker
+            UserDto userDto = circuitBreakerService.getUserById(userId);
+
             Cart newCart = new Cart();
             newCart.setUserId(userId);
             newCart.setUsername(userDto.getUsername());
@@ -123,6 +107,7 @@ public class CartService {
         });
     }
 
+    // Конвертирует сущность Cart в DTO
     private CartDto convertToDto(Cart cart) {
         CartDto cartDto = new CartDto();
         cartDto.setId(cart.getId());
@@ -135,6 +120,7 @@ public class CartService {
         return cartDto;
     }
 
+    // Конвертирует сущность CartItem в DTO
     private CartItemDto convertToDto(CartItem cartItem) {
         CartItemDto cartItemDto = new CartItemDto();
         cartItemDto.setId(cartItem.getId());

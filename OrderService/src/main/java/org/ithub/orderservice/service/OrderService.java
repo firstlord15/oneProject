@@ -2,11 +2,11 @@ package org.ithub.orderservice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.ithub.orderservice.dto.cart.CartDto;
 import org.ithub.orderservice.dto.OrderDto;
 import org.ithub.orderservice.dto.OrderItemDto;
 import org.ithub.orderservice.dto.OrderRequest;
 import org.ithub.orderservice.dto.OrderStatusUpdateRequest;
+import org.ithub.orderservice.dto.cart.CartDto;
 import org.ithub.orderservice.dto.payment.PaymentConstants;
 import org.ithub.orderservice.dto.payment.PaymentResponseDto;
 import org.ithub.orderservice.exception.InvalidOrderStateException;
@@ -31,18 +31,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OrderService {
     private final OrderRepository orderRepository;
-    private final CartManagementService cartService;
     private final InventoryService inventoryService;
     private final PaymentProcessingService paymentService;
-    private final NotificationService notificationService;
     private final OrderStatusService statusService;
+    private final CircuitBreakerService circuitBreakerService;
 
     @Transactional
     public OrderDto createOrder(OrderRequest orderRequest) {
         log.info("Creating new order for user: {}", orderRequest.getUserId());
 
-        // Получаем корзину пользователя
-        CartDto cart = cartService.getUserCart(orderRequest.getUserId());
+        // Получаем корзину пользователя с применением Circuit Breaker
+        CartDto cart = circuitBreakerService.getUserCart(orderRequest.getUserId());
 
         // Создаем новый заказ
         Order order = new Order();
@@ -63,18 +62,14 @@ public class OrderService {
         Order savedOrder = orderRepository.save(order);
         log.info("Created order with ID: {}", savedOrder.getId());
 
-        // Очищаем корзину пользователя
-        cartService.clearUserCart(orderRequest.getUserId());
+        // Очищаем корзину пользователя с применением Circuit Breaker
+        circuitBreakerService.clearUserCart(orderRequest.getUserId());
 
         // Обрабатываем платеж если не наличными
         processOrderPayment(savedOrder, orderRequest);
 
-        // Отправляем уведомление
-        try {
-            notificationService.sendOrderNotification(savedOrder, "ORDER_CREATED");
-        } catch (Exception e) {
-            log.error("Failed to send notification: {}", e.getMessage());
-        }
+        // Отправляем уведомление с применением Circuit Breaker
+        circuitBreakerService.sendOrderNotification(savedOrder, "ORDER_CREATED");
 
         return convertToDto(savedOrder);
     }
@@ -130,8 +125,8 @@ public class OrderService {
         Order savedOrder = orderRepository.save(order);
         log.info("Updated order status from {} to {}", oldStatus, savedOrder.getStatus());
 
-        // Отправляем уведомление
-        notificationService.sendOrderNotification(savedOrder, "STATUS_UPDATED");
+        // Отправляем уведомление с применением Circuit Breaker
+        circuitBreakerService.sendOrderNotification(savedOrder, "STATUS_UPDATED");
 
         return convertToDto(savedOrder);
     }
@@ -153,26 +148,21 @@ public class OrderService {
         // Добавляем причину отмены
         updateOrderNotes(order, reason != null ? "Cancel reason: " + reason : null);
 
-        // Отменяем платеж, если он был создан
+        // Отменяем платеж с применением Circuit Breaker
         if (order.getPaymentId() != null) {
-            try {
-                paymentService.cancelPayment(order.getPaymentId());
-            } catch (Exception e) {
-                log.error("Failed to cancel payment for order {}: {}", orderId, e.getMessage());
-                // Продолжаем отмену заказа даже если не удалось отменить платеж
-            }
+            circuitBreakerService.cancelPayment(order.getPaymentId());
         }
 
         orderRepository.save(order);
         log.info("Cancelled order ID: {} (previous status: {})", orderId, oldStatus);
 
-        // Возвращаем товары на склад
+        // Возвращаем товары на склад с применением Circuit Breaker
         for (OrderItem item : order.getItems()) {
-            inventoryService.increaseStock(item.getProductId(), item.getQuantity());
+            circuitBreakerService.increaseStock(item.getProductId(), item.getQuantity());
         }
 
-        // Отправляем уведомление
-        notificationService.sendOrderNotification(order, "ORDER_CANCELLED");
+        // Отправляем уведомление с применением Circuit Breaker
+        circuitBreakerService.sendOrderNotification(order, "ORDER_CANCELLED");
     }
 
     @Transactional(readOnly = true)
@@ -185,7 +175,6 @@ public class OrderService {
     }
 
     // Вспомогательные методы
-
     private Order findOrderById(Long orderId) {
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found with ID: " + orderId));

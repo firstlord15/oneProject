@@ -1,6 +1,7 @@
 package org.ithub.userservice.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ import java.util.Map;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/users")
+@Tag(name = "User Controller", description = "API для управления пользователями")
 public class UserController {
     private final UserService userService;
 

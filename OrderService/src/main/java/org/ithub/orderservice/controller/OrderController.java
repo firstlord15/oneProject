@@ -26,13 +26,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
-@Slf4j
 @Tag(name = "Order Controller", description = "API для управления заказами")
 public class OrderController {
-
     private final OrderService orderService;
 
     @PostMapping
