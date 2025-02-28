@@ -13,6 +13,6 @@ public interface CatalogClient {
     @GetMapping("api/catalog/{id}")
     ProductDto getProductById(@PathVariable("id") Long productId);
 
-    @PutMapping("api/catalog/{id}/stock")
-    void updateStock(@PathVariable("id") Long productId, @RequestParam("quantity") int quantity);
+    @PutMapping("api/catalog/{id}")
+    void updateStock(@PathVariable("id") Long productId);
 }

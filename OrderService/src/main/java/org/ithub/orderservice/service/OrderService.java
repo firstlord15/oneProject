@@ -49,6 +49,7 @@ public class OrderService {
         order.setUsername(cart.getUsername());
         order.setOrderDate(LocalDateTime.now());
         order.setStatus(OrderStatus.CREATED);
+        order.setTrackingNumber("PENDING");
         order.setShippingAddress(orderRequest.getShippingAddress());
         order.setBillingAddress(orderRequest.getBillingAddress());
         order.setPaymentMethod(orderRequest.getPaymentMethod());
@@ -100,7 +101,6 @@ public class OrderService {
     @Transactional
     public OrderDto updateOrderStatus(Long orderId, OrderStatusUpdateRequest updateRequest) {
         log.info("Updating status for order {}: {}", orderId, updateRequest.getStatus());
-
         Order order = findOrderById(orderId);
 
         // Проверяем валидность перехода статуса
@@ -156,11 +156,6 @@ public class OrderService {
         orderRepository.save(order);
         log.info("Cancelled order ID: {} (previous status: {})", orderId, oldStatus);
 
-        // Возвращаем товары на склад с применением Circuit Breaker
-        for (OrderItem item : order.getItems()) {
-            circuitBreakerService.increaseStock(item.getProductId(), item.getQuantity());
-        }
-
         // Отправляем уведомление с применением Circuit Breaker
         circuitBreakerService.sendOrderNotification(order, "ORDER_CANCELLED");
     }
@@ -194,9 +189,6 @@ public class OrderService {
             orderItem.setPrice(cartItem.getPrice());
             orderItem.setQuantity(cartItem.getQuantity());
             order.addItem(orderItem);
-
-            // Уменьшаем остаток на складе
-            inventoryService.reduceStock(cartItem.getProductId(), cartItem.getQuantity());
         }
     }
 

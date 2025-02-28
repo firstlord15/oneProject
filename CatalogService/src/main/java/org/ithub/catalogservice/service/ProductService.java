@@ -58,8 +58,8 @@ public class ProductService {
         return productRepository.findByNameContainingIgnoreCase(keyword);
     }
 
-    public List<Product> saveAll(List<Product> productList){
+    public void saveAll(List<Product> productList){
         log.warn("created products: {}", productList);
-        return productRepository.saveAll(productList);
+        productRepository.saveAll(productList);
     }
 }

@@ -61,28 +61,6 @@ public class CircuitBreakerService {
         return true;
     }
 
-    @CircuitBreaker(name = "inventoryService", fallbackMethod = "reduceStockFallback")
-    public void reduceStock(Long productId, int quantity) {
-        inventoryService.reduceStock(productId, quantity);
-    }
-
-    public void reduceStockFallback(Long productId, int quantity, Exception e) {
-        log.error("Circuit breaker triggered when reducing stock for product {}: {}", productId, e.getMessage());
-        // Запланировать асинхронное обновление запасов позже
-        log.warn("Stock update will be retried asynchronously for product {}, quantity {}", productId, quantity);
-    }
-
-    @CircuitBreaker(name = "inventoryService", fallbackMethod = "increaseStockFallback")
-    public void increaseStock(Long productId, int quantity) {
-        inventoryService.increaseStock(productId, quantity);
-    }
-
-    public void increaseStockFallback(Long productId, int quantity, Exception e) {
-        log.error("Circuit breaker triggered when increasing stock for product {}: {}", productId, e.getMessage());
-        // Запланировать асинхронное обновление запасов позже
-        log.warn("Stock update will be retried asynchronously for product {}, quantity {}", productId, quantity);
-    }
-
     @CircuitBreaker(name = "paymentService", fallbackMethod = "processPaymentFallback")
     public PaymentResponseDto processPayment(Order order, OrderRequest orderRequest) {
         return paymentService.processPayment(order, orderRequest);

@@ -20,7 +20,7 @@ public class OrderRequest {
     @NotBlank(message = "Billing address is required")
     private String billingAddress;
 
-    @NotBlank(message = "Payment method is required")
+    @NotNull(message = "Payment method is required")
     private PaymentMethod paymentMethod;
 
     private String notes;
